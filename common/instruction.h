@@ -31,7 +31,12 @@ public:
         RETURN = 18,
         SET = 19,
         SMALLER = 20,
-        SUBTRACT = 21
+        SUBTRACT = 21,
+        // New biological simulation instructions
+        MATE_REQUEST = 22,    // Request mating with another organism
+        CONSUME_FOOD = 23,    // Attempt to consume food
+        MATE_ACCEPT = 24,     // Accept mating request from another organism
+        ROCK_PAPER_SCISSORS = 25  // Play rock-paper-scissors (for conflict resolution)
     };
 
     virtual ~Instruction() = 0;
