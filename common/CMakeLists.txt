@@ -16,6 +16,8 @@ add_library(common STATIC
     txtfileparser.h
     instruction.cpp
     instruction.h
+    biological_sim.cpp
+    biological_sim.h
     instructions/multiply.cpp
     instructions/multiply.h
     instructions/add.cpp
@@ -60,6 +62,14 @@ add_library(common STATIC
     instructions/clear.h
     instructions/invert.cpp
     instructions/invert.h
+    instructions/mate_request.cpp
+    instructions/mate_request.h
+    instructions/consume_food.cpp
+    instructions/consume_food.h
+    instructions/mate_accept.cpp
+    instructions/mate_accept.h
+    instructions/rock_paper_scissors.cpp
+    instructions/rock_paper_scissors.h
 )
 
 target_include_directories(common PRIVATE
