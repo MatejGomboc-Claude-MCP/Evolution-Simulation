@@ -1,0 +1,202 @@
+#ifndef BIOLOGICAL_SIM_H
+#define BIOLOGICAL_SIM_H
+
+#include <vector>
+#include <memory>
+#include <random>
+#include <optional>
+#include "program.h"
+
+// Forward declarations
+class Organism;
+class Food;
+class World;
+
+/**
+ * @brief Represents the choice in rock-paper-scissors game
+ */
+enum class RPSChoice {
+    ROCK = 0,
+    PAPER = 1,
+    SCISSORS = 2
+};
+
+/**
+ * @brief Result of rock-paper-scissors game
+ */
+enum class RPSResult {
+    PLAYER1_WINS,
+    PLAYER2_WINS,
+    TIE
+};
+
+/**
+ * @brief Represents a mating request between organisms
+ */
+struct MatingRequest {
+    size_t requester_id;
+    size_t target_id;
+    bool accepted = false;
+};
+
+/**
+ * @class Organism
+ * @brief Extended organism class with energy and biological behaviors
+ */
+class Organism {
+public:
+    Program program;
+    double fitness;
+    double energy;
+    size_t id;
+    size_t age;
+    std::optional<MatingRequest> pending_mating_request;
+    std::vector<size_t> mating_requests_received;
+    
+    static constexpr double INITIAL_ENERGY = 100.0;
+    static constexpr double ENERGY_DEPLETION_RATE = 1.0;
+    static constexpr double MATING_ENERGY_COST = 20.0;
+    static constexpr double FOOD_ENERGY_GAIN = 30.0;
+    
+    Organism(size_t organism_id);
+    
+    /**
+     * @brief Deplete energy over time
+     * @return true if organism is still alive, false if dead
+     */
+    bool depleteEnergy();
+    
+    /**
+     * @brief Check if organism has enough energy for an action
+     * @param required_energy Energy required for the action
+     * @return true if organism has enough energy
+     */
+    bool hasEnergy(double required_energy) const;
+    
+    /**
+     * @brief Consume energy for an action
+     * @param amount Amount of energy to consume
+     */
+    void consumeEnergy(double amount);
+    
+    /**
+     * @brief Gain energy from food
+     * @param amount Amount of energy to gain
+     */
+    void gainEnergy(double amount);
+    
+    /**
+     * @brief Make RPS choice based on internal state
+     * @return Rock, paper, or scissors choice
+     */
+    RPSChoice makeRPSChoice() const;
+};
+
+/**
+ * @class Food
+ * @brief Represents food that organisms can consume
+ */
+class Food {
+public:
+    size_t id;
+    double energy_value;
+    bool consumed;
+    
+    Food(size_t food_id, double energy = Organism::FOOD_ENERGY_GAIN);
+    
+    /**
+     * @brief Attempt to consume this food
+     * @return Energy value if successful, 0 if already consumed
+     */
+    double consume();
+};
+
+/**
+ * @class World
+ * @brief The simulation world containing organisms and food
+ */
+class World {
+private:
+    std::mt19937 rng;
+    
+public:
+    std::vector<std::unique_ptr<Organism>> organisms;
+    std::vector<std::unique_ptr<Food>> food_items;
+    size_t next_organism_id;
+    size_t next_food_id;
+    
+    World();
+    
+    /**
+     * @brief Add a new organism to the world
+     * @return Pointer to the added organism
+     */
+    Organism* addOrganism();
+    
+    /**
+     * @brief Add food to the world
+     * @param count Number of food items to add
+     */
+    void addFood(size_t count);
+    
+    /**
+     * @brief Process mating request between organisms
+     * @param requester_id ID of organism making request
+     * @param target_id ID of target organism
+     * @return true if request was registered successfully
+     */
+    bool processMatingRequest(size_t requester_id, size_t target_id);
+    
+    /**
+     * @brief Process mating acceptance
+     * @param acceptor_id ID of organism accepting
+     * @param requester_id ID of original requester
+     * @return Pointer to child organism if successful, nullptr otherwise
+     */
+    Organism* processMatingAcceptance(size_t acceptor_id, size_t requester_id);
+    
+    /**
+     * @brief Attempt to consume food
+     * @param organism_id ID of organism attempting to eat
+     * @param food_id ID of food to consume
+     * @return true if successful
+     */
+    bool consumeFood(size_t organism_id, size_t food_id);
+    
+    /**
+     * @brief Resolve conflict using rock-paper-scissors
+     * @param player1 First player choice
+     * @param player2 Second player choice
+     * @return Result of the game
+     */
+    static RPSResult playRockPaperScissors(RPSChoice player1, RPSChoice player2);
+    
+    /**
+     * @brief Resolve conflict between two organisms
+     * @param org1_id First organism ID
+     * @param org2_id Second organism ID
+     * @return ID of winner
+     */
+    size_t resolveConflict(size_t org1_id, size_t org2_id);
+    
+    /**
+     * @brief Update world state (deplete energy, remove dead organisms)
+     */
+    void update();
+    
+    /**
+     * @brief Get organism by ID
+     * @param id Organism ID
+     * @return Pointer to organism or nullptr if not found
+     */
+    Organism* getOrganism(size_t id);
+    
+    /**
+     * @brief Get food by ID
+     * @param id Food ID
+     * @return Pointer to food or nullptr if not found
+     */
+    Food* getFood(size_t id);
+};
+
+#endif // BIOLOGICAL_SIM_H
