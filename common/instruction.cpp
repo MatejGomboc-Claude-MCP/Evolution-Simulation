@@ -26,7 +26,6 @@
 #include "mate_request.h"
 #include "consume_food.h"
 #include "mate_accept.h"
-#include "rock_paper_scissors.h"
 
 Instruction::~Instruction() = default;
 
@@ -77,22 +76,10 @@ std::unique_ptr<Instruction> Instruction::fromStringTokens(const std::vector<std
             }
         }},
         { "MATE_ACCEPT", [](const std::vector<std::string>& tokens) -> std::unique_ptr<Instruction> {
-            if (tokens.size() != 3) return nullptr;
+            if (tokens.size() != 2) return nullptr;
             try {
-                uint16_t requester_addr = std::stoi(tokens[1]);
-                uint16_t result_addr = std::stoi(tokens[2]);
-                return std::make_unique<MateAccept>(requester_addr, result_addr);
-            } catch (...) {
-                return nullptr;
-            }
-        }},
-        { "ROCK_PAPER_SCISSORS", [](const std::vector<std::string>& tokens) -> std::unique_ptr<Instruction> {
-            if (tokens.size() != 4) return nullptr;
-            try {
-                uint16_t choice_addr = std::stoi(tokens[1]);
-                uint16_t opponent_addr = std::stoi(tokens[2]);
-                uint16_t result_addr = std::stoi(tokens[3]);
-                return std::make_unique<RockPaperScissors>(choice_addr, opponent_addr, result_addr);
+                uint16_t mate_index_addr = std::stoi(tokens[1]);
+                return std::make_unique<MateAccept>(mate_index_addr);
             } catch (...) {
                 return nullptr;
             }
@@ -156,24 +143,11 @@ std::unique_ptr<Instruction> Instruction::fromByteArray(const std::vector<uint8_
             return std::make_unique<ConsumeFood>(food_addr, result_addr);
         }},
         { static_cast<uint8_t>(Id::MATE_ACCEPT), [](const std::vector<uint8_t>& array, size_t& offset) -> std::unique_ptr<Instruction> {
-            if (array.size() - offset < 5) return nullptr;
+            if (array.size() - offset < 3) return nullptr;
             offset++;
-            uint16_t requester_addr = array[offset] | (array[offset + 1] << 8);
+            uint16_t mate_index_addr = array[offset] | (array[offset + 1] << 8);
             offset += 2;
-            uint16_t result_addr = array[offset] | (array[offset + 1] << 8);
-            offset += 2;
-            return std::make_unique<MateAccept>(requester_addr, result_addr);
-        }},
-        { static_cast<uint8_t>(Id::ROCK_PAPER_SCISSORS), [](const std::vector<uint8_t>& array, size_t& offset) -> std::unique_ptr<Instruction> {
-            if (array.size() - offset < 7) return nullptr;
-            offset++;
-            uint16_t choice_addr = array[offset] | (array[offset + 1] << 8);
-            offset += 2;
-            uint16_t opponent_addr = array[offset] | (array[offset + 1] << 8);
-            offset += 2;
-            uint16_t result_addr = array[offset] | (array[offset + 1] << 8);
-            offset += 2;
-            return std::make_unique<RockPaperScissors>(choice_addr, opponent_addr, result_addr);
+            return std::make_unique<MateAccept>(mate_index_addr);
         }}
     };
 
