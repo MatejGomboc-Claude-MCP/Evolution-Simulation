@@ -56,7 +56,7 @@ public:
     static constexpr double INITIAL_ENERGY = 100.0;
     static constexpr double ENERGY_DEPLETION_RATE = 1.0;
     static constexpr double MATING_ENERGY_COST = 20.0;
-    static constexpr double FOOD_ENERGY_GAIN = 30.0;
+    static constexpr double MUTATION_RATE = 0.1;  // Chance to mutate each instruction
     
     Organism(size_t organism_id);
     
@@ -86,10 +86,10 @@ public:
     void gainEnergy(double amount);
     
     /**
-     * @brief Make RPS choice based on internal state
-     * @return Rock, paper, or scissors choice
+     * @brief Apply random mutations to the organism's program
+     * @param rng Random number generator
      */
-    RPSChoice makeRPSChoice() const;
+    void mutate(std::mt19937& rng);
 };
 
 /**
@@ -97,15 +97,41 @@ public:
  * @brief Represents food that organisms can consume
  */
 class Food {
+private:
+    std::mt19937* world_rng;  // Pointer to world's RNG
+    
 public:
     size_t id;
     double energy_value;
     bool consumed;
+    static constexpr double DEFAULT_ENERGY = 30.0;
     
-    Food(size_t food_id, double energy = Organism::FOOD_ENERGY_GAIN);
+    Food(size_t food_id, std::mt19937* rng, double energy = DEFAULT_ENERGY);
     
     /**
-     * @brief Attempt to consume this food
+     * @brief Attempt to consume this food, resolving conflicts if necessary
+     * @param organisms Vector of organisms attempting to consume
+     * @return ID of organism that gets to consume, or -1 if none
+     */
+    size_t resolveConsumptionConflict(const std::vector<Organism*>& organisms);
+    
+    /**
+     * @brief Make RPS choice for an organism (used in conflict resolution)
+     * @param organism The organism making the choice
+     * @return Rock, paper, or scissors choice
+     */
+    RPSChoice makeRPSChoice(const Organism* organism) const;
+    
+    /**
+     * @brief Play rock-paper-scissors game
+     * @param player1 First player choice
+     * @param player2 Second player choice
+     * @return Result of the game
+     */
+    static RPSResult playRockPaperScissors(RPSChoice player1, RPSChoice player2);
+    
+    /**
+     * @brief Consume this food
      * @return Energy value if successful, 0 if already consumed
      */
     double consume();
@@ -129,9 +155,10 @@ public:
     
     /**
      * @brief Add a new organism to the world
+     * @param apply_initial_mutations Whether to apply mutations at creation
      * @return Pointer to the added organism
      */
-    Organism* addOrganism();
+    Organism* addOrganism(bool apply_initial_mutations = true);
     
     /**
      * @brief Add food to the world
@@ -164,20 +191,11 @@ public:
     bool consumeFood(size_t organism_id, size_t food_id);
     
     /**
-     * @brief Resolve conflict using rock-paper-scissors
-     * @param player1 First player choice
-     * @param player2 Second player choice
-     * @return Result of the game
+     * @brief Handle multiple organisms trying to consume the same food
+     * @param food_id ID of food being contested
+     * @param organism_ids IDs of organisms competing for the food
      */
-    static RPSResult playRockPaperScissors(RPSChoice player1, RPSChoice player2);
-    
-    /**
-     * @brief Resolve conflict between two organisms
-     * @param org1_id First organism ID
-     * @param org2_id Second organism ID
-     * @return ID of winner
-     */
-    size_t resolveConflict(size_t org1_id, size_t org2_id);
+    void resolveMultipleFoodConsumption(size_t food_id, const std::vector<size_t>& organism_ids);
     
     /**
      * @brief Update world state (deplete energy, remove dead organisms)
@@ -197,6 +215,12 @@ public:
      * @return Pointer to food or nullptr if not found
      */
     Food* getFood(size_t id);
+    
+    /**
+     * @brief Get the world's random number generator
+     * @return Reference to RNG
+     */
+    std::mt19937& getRNG() { return rng; }
 };
 
 #endif // BIOLOGICAL_SIM_H
