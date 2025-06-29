@@ -68,8 +68,6 @@ add_library(common STATIC
     instructions/consume_food.h
     instructions/mate_accept.cpp
     instructions/mate_accept.h
-    instructions/rock_paper_scissors.cpp
-    instructions/rock_paper_scissors.h
 )
 
 target_include_directories(common PRIVATE
