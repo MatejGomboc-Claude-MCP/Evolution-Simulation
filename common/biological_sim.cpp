@@ -26,16 +26,25 @@ void Organism::gainEnergy(double amount) {
     energy += amount;
 }
 
-RPSChoice Organism::makeRPSChoice() const {
-    // Use organism's internal state to make a choice
-    // This could be based on memory values or other factors
-    int choice = static_cast<int>(id + age) % 3;
-    return static_cast<RPSChoice>(choice);
+void Organism::mutate(std::mt19937& rng) {
+    std::uniform_real_distribution<double> mut_dist(0.0, 1.0);
+    
+    // For simplicity, we'll regenerate parts of the program
+    // In a real implementation, you would mutate individual instructions
+    if (mut_dist(rng) < MUTATION_RATE) {
+        // Generate a new random program (heavy mutation)
+        program = Program::random();
+    }
+    // You could add more sophisticated mutation operators here:
+    // - Change individual instruction parameters
+    // - Add/remove instructions
+    // - Swap instruction order
+    // - Modify memory addresses
 }
 
 // Food implementation
-Food::Food(size_t food_id, double energy) 
-    : id(food_id), energy_value(energy), consumed(false) {}
+Food::Food(size_t food_id, std::mt19937* rng, double energy) 
+    : id(food_id), energy_value(energy), consumed(false), world_rng(rng) {}
 
 double Food::consume() {
     if (!consumed) {
@@ -45,14 +54,84 @@ double Food::consume() {
     return 0.0;
 }
 
+RPSChoice Food::makeRPSChoice(const Organism* organism) const {
+    // Use organism's internal state to make a choice
+    int choice = static_cast<int>(organism->id + organism->age) % 3;
+    return static_cast<RPSChoice>(choice);
+}
+
+RPSResult Food::playRockPaperScissors(RPSChoice player1, RPSChoice player2) {
+    if (player1 == player2) return RPSResult::TIE;
+    
+    if ((player1 == RPSChoice::ROCK && player2 == RPSChoice::SCISSORS) ||
+        (player1 == RPSChoice::PAPER && player2 == RPSChoice::ROCK) ||
+        (player1 == RPSChoice::SCISSORS && player2 == RPSChoice::PAPER)) {
+        return RPSResult::PLAYER1_WINS;
+    }
+    
+    return RPSResult::PLAYER2_WINS;
+}
+
+size_t Food::resolveConsumptionConflict(const std::vector<Organism*>& organisms) {
+    if (organisms.empty() || consumed) return -1;
+    if (organisms.size() == 1) return organisms[0]->id;
+    
+    // Multiple organisms competing - use the conflict resolution algorithm
+    std::vector<Organism*> candidates = organisms;
+    
+    // First round: Rock-Paper-Scissors elimination
+    while (candidates.size() > 1) {
+        std::vector<Organism*> winners;
+        
+        // Pair up organisms for RPS games
+        for (size_t i = 0; i + 1 < candidates.size(); i += 2) {
+            RPSChoice choice1 = makeRPSChoice(candidates[i]);
+            RPSChoice choice2 = makeRPSChoice(candidates[i + 1]);
+            RPSResult result = playRockPaperScissors(choice1, choice2);
+            
+            if (result == RPSResult::PLAYER1_WINS) {
+                winners.push_back(candidates[i]);
+            } else if (result == RPSResult::PLAYER2_WINS) {
+                winners.push_back(candidates[i + 1]);
+            } else {
+                // Tie: use energy as tiebreaker
+                if (candidates[i]->energy > candidates[i + 1]->energy) {
+                    winners.push_back(candidates[i]);
+                } else if (candidates[i + 1]->energy > candidates[i]->energy) {
+                    winners.push_back(candidates[i + 1]);
+                } else {
+                    // Still tied: random selection
+                    std::bernoulli_distribution dist(0.5);
+                    winners.push_back(dist(*world_rng) ? candidates[i] : candidates[i + 1]);
+                }
+            }
+        }
+        
+        // If odd number, last organism advances automatically
+        if (candidates.size() % 2 == 1) {
+            winners.push_back(candidates.back());
+        }
+        
+        candidates = winners;
+    }
+    
+    return candidates[0]->id;
+}
+
 // World implementation
 World::World() : next_organism_id(0), next_food_id(0) {
     auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     rng.seed(seed);
 }
 
-Organism* World::addOrganism() {
+Organism* World::addOrganism(bool apply_initial_mutations) {
     auto organism = std::make_unique<Organism>(next_organism_id++);
+    
+    // Apply initial mutations if requested
+    if (apply_initial_mutations) {
+        organism->mutate(rng);
+    }
+    
     Organism* ptr = organism.get();
     organisms.push_back(std::move(organism));
     return ptr;
@@ -60,7 +139,7 @@ Organism* World::addOrganism() {
 
 void World::addFood(size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        food_items.push_back(std::make_unique<Food>(next_food_id++));
+        food_items.push_back(std::make_unique<Food>(next_food_id++, &rng));
     }
 }
 
@@ -101,11 +180,10 @@ Organism* World::processMatingAcceptance(size_t acceptor_id, size_t requester_id
     acceptor->consumeEnergy(Organism::MATING_ENERGY_COST);
     requester->consumeEnergy(Organism::MATING_ENERGY_COST);
     
-    // Create offspring
-    Organism* child = addOrganism();
+    // Create offspring (without initial mutations - they'll be applied during creation)
+    Organism* child = addOrganism(false);
     
     // Simple genetic combination: randomly choose instructions from parents
-    // In a more sophisticated implementation, this would involve crossover and mutation
     std::uniform_int_distribution<int> dist(0, 1);
     
     // Inherit some fitness from parents (with variation)
@@ -115,6 +193,17 @@ Organism* World::processMatingAcceptance(size_t acceptor_id, size_t requester_id
     
     // Give child some initial energy from parents
     child->energy = (acceptor->energy + requester->energy) * 0.1 + Organism::INITIAL_ENERGY * 0.5;
+    
+    // TODO: Implement proper genetic crossover between parent programs
+    // For now, randomly choose one parent's program
+    if (dist(rng) == 0) {
+        child->program = acceptor->program;
+    } else {
+        child->program = requester->program;
+    }
+    
+    // Apply mutations to the child
+    child->mutate(rng);
     
     // Clear mating request
     requester->pending_mating_request.reset();
@@ -130,8 +219,9 @@ bool World::consumeFood(size_t organism_id, size_t food_id) {
     Organism* organism = getOrganism(organism_id);
     Food* food = getFood(food_id);
     
-    if (!organism || !food) return false;
+    if (!organism || !food || food->consumed) return false;
     
+    // For single organism, just consume
     double energy_gained = food->consume();
     if (energy_gained > 0) {
         organism->gainEnergy(energy_gained);
@@ -141,39 +231,22 @@ bool World::consumeFood(size_t organism_id, size_t food_id) {
     return false;
 }
 
-RPSResult World::playRockPaperScissors(RPSChoice player1, RPSChoice player2) {
-    if (player1 == player2) return RPSResult::TIE;
+void World::resolveMultipleFoodConsumption(size_t food_id, const std::vector<size_t>& organism_ids) {
+    Food* food = getFood(food_id);
+    if (!food || food->consumed) return;
     
-    if ((player1 == RPSChoice::ROCK && player2 == RPSChoice::SCISSORS) ||
-        (player1 == RPSChoice::PAPER && player2 == RPSChoice::ROCK) ||
-        (player1 == RPSChoice::SCISSORS && player2 == RPSChoice::PAPER)) {
-        return RPSResult::PLAYER1_WINS;
+    std::vector<Organism*> competing_organisms;
+    for (size_t id : organism_ids) {
+        Organism* org = getOrganism(id);
+        if (org) {
+            competing_organisms.push_back(org);
+        }
     }
     
-    return RPSResult::PLAYER2_WINS;
-}
-
-size_t World::resolveConflict(size_t org1_id, size_t org2_id) {
-    Organism* org1 = getOrganism(org1_id);
-    Organism* org2 = getOrganism(org2_id);
-    
-    if (!org1 || !org2) return org1 ? org1_id : org2_id;
-    
-    // First: Rock-Paper-Scissors
-    RPSChoice choice1 = org1->makeRPSChoice();
-    RPSChoice choice2 = org2->makeRPSChoice();
-    RPSResult rps_result = playRockPaperScissors(choice1, choice2);
-    
-    if (rps_result == RPSResult::PLAYER1_WINS) return org1_id;
-    if (rps_result == RPSResult::PLAYER2_WINS) return org2_id;
-    
-    // Tie: Use energy as indicator of dominance
-    if (org1->energy > org2->energy) return org1_id;
-    if (org2->energy > org1->energy) return org2_id;
-    
-    // Still tied: Random selection (Bernoulli distribution)
-    std::bernoulli_distribution dist(0.5);
-    return dist(rng) ? org1_id : org2_id;
+    size_t winner_id = food->resolveConsumptionConflict(competing_organisms);
+    if (winner_id != static_cast<size_t>(-1)) {
+        consumeFood(winner_id, food_id);
+    }
 }
 
 void World::update() {
